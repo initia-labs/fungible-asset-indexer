@@ -1,0 +1,96 @@
+# Fungible Asset Indexer
+
+A service that indexes token balances and metadata on the Initia blockchain.
+
+## Prerequisites
+
+- Node.js 16 or higher
+- PostgreSQL database
+- Access to Initia blockchain node
+
+## Quick Start
+
+### 1. Installation 
+
+```bash
+npm install
+```
+
+### 2. Environment Setup
+
+Create a `.env` file in the project root with the following configuration:
+
+#### Database Settings
+| Variable | Description | Default Value |
+|----------|-------------|---------------|
+| DBHOST | Database host | `localhost` |
+| DBHOSTRO | Database host (read-only) | `localhost` |
+| DBUSERNAME | Database username | `postgres` |
+| DBPASS | Database password | `password` |
+| DATABASE | Database name | `fungible_assets` |
+| DBPORT | Database port | `5432` |
+
+#### Server Settings
+| Variable | Description | Default Value |
+|----------|-------------|---------------|
+| PORT | Server port | `5000` |
+| RPC_URL | Initia RPC endpoint | `https://rpc.testnet.initia.xyz` |
+| REST_URL | Initia REST endpoint | `https://rest.testnet.initia.xyz` |
+
+#### Indexer Settings
+| Variable | Description | Default Value |
+|----------|-------------|---------------|
+| MONITOR_INTERVAL | Block monitoring interval in ms | `1000` |
+| COOLING_DURATION | Operation cooling period in ms | `100` |
+| SNAPSHOT_INTERVAL | Snapshot interval in blocks | `100` |
+
+#### Asset Configuration
+| Variable | Description | Example |
+|----------|-------------|---------|
+| FUNGIBLE_ASSETS | JSON array of assets to monitor | [{"denom":"move/543b35a39cfadad3da3c23249c474455d15efd2f94f849473226dee8a3c7a9e1","type":"weight", "start_height": 1847430, "creation_height": 1715000}]
+ |
+
+### 3. Start Indexer
+```bash
+npm run start
+```
+
+## Asset Types
+
+- `normal`: Standard fungible asset (`0x1::fungible_asset`)
+- `stable`: Stable pool LP token (`0x1::stableswap`)
+- `weight`: Weighted pool LP token (`0x1::dex`)
+
+## Data Model
+
+### Balance Entity
+```typescript
+@Entity('balance')
+export class BalanceEntity {
+  @PrimaryColumn('text')
+  storeAddr: string        // Fungible store address
+
+  @PrimaryColumn('text')
+  @Index('balance_denom')
+  denom: string           // Asset denomination
+
+  @PrimaryColumn('bigint')
+  @Index('balance_height')
+  height: number         // Block height
+
+  @Column('bigint')
+  @Index('balance_amount')
+  amount: number        // Token amount
+
+  @Column('jsonb', { nullable: true })
+  underlying?: Record<string, number>  // Underlying tokens for LP positions
+}
+```
+
+### Example: LP Token Underlying Data
+```json
+{
+  "uinit": 800,    // 80% INIT
+  "uusdc": 200     // 20% USDC
+}
+```
