@@ -3,6 +3,30 @@ import Axios, { AxiosInstance } from 'axios'
 import https from 'https'
 import http from 'http'
 
+export interface Account {
+  '@type': string
+  base_account: {
+    address: AccAddress
+    pub_key: string | null
+    account_number: string
+    sequence: string
+  }
+}
+export interface AccountPaginationResponse {
+  accounts: Account[]
+  pagination: {
+    next_key: string
+    total: string
+  }
+}
+
+export interface BalanceResponse {
+  balance: {
+    denom: string
+    amount: string
+  }
+}
+
 export type APIParams = Record<string, string | number | null | undefined>
 
 export interface DelegationBalanceResponse {
@@ -31,6 +55,52 @@ export class RESTClient {
     }).then((res) => res.metadata)
   }
 
+  async getCosmosAccount(height: number, paginationKey?: string) {
+    const params: APIParams = {}
+    if (paginationKey) {
+      params['pagination.key'] = paginationKey
+    }
+
+    return this.get<AccountPaginationResponse>(
+      'cosmos/auth/v1beta1/accounts',
+      {
+        ...params,
+      },
+      height
+    ).then((res) => ({
+      accounts: res.accounts.reduce<AccAddress[]>((acc, account) => {
+        if (account['@type'] === '/cosmos.auth.v1beta1.BaseAccount') {
+          acc.push(account.base_account.address)
+        }
+        return acc
+      }, []),
+      pagination: res.pagination,
+    }))
+  }
+
+  async getAllCosmosAccounts(height: number): Promise<string[]> {
+    let paginationKey: string | undefined
+    const accounts: string[] = []
+    for (;;) {
+      const response = await this.getCosmosAccount(height, paginationKey)
+      accounts.push(...response.accounts)
+      if (response.pagination.next_key) {
+        paginationKey = response.pagination.next_key
+      } else {
+        break
+      }
+    }
+    return accounts
+  }
+
+  async getBalance(height: number, account: string, denom: string) {
+    return this.get<BalanceResponse>(
+      `cosmos/bank/v1beta1/balances/${account}/by_denom`,
+      { denom },
+      height
+    ).then((res) => res.balance)
+  }
+
   async viewFunction<T>(
     address: AccAddress,
     moduleName: string,
@@ -47,6 +117,35 @@ export class RESTClient {
       },
       height
     ).then((res) => JSON.parse(res.data) as T)
+  }
+
+  async getOwner(height: number, storeAccount: string) {
+    return this.viewFunction<string>(
+      '0x1',
+      'object',
+      'owner',
+      [],
+      [bcs.address().serialize(storeAccount).toBase64()],
+      height
+    )
+  }
+
+  async getPrimaryFungibleStoreAddress(
+    height: number,
+    owner: string,
+    metadata: string
+  ) {
+    return this.viewFunction<string>(
+      '0x1',
+      'primary_fungible_store',
+      'primary_store_address',
+      [],
+      [
+        bcs.address().serialize(owner).toBase64(),
+        bcs.address().serialize(metadata).toBase64(),
+      ],
+      height
+    )
   }
 
   async checkAssetExists(height: number, metadata: string) {
@@ -71,29 +170,18 @@ export class RESTClient {
     ).then((res) => Number(res))
   }
 
-  async getFungibleAssetAmount(height: number, storeAccount: string) {
-    return this.viewFunction<string>(
-      '0x1',
-      'fungible_asset',
-      'balance',
-      [],
-      [bcs.address().serialize(storeAccount).toBase64()],
-      height
-    )
-  }
-
-  async getPairMetadata(height: number, metadata: string) {
+  async getWeightPoolMetdata(height: number, metadata: string) {
     return this.viewFunction<{ coin_a_denom: string; coin_b_denom: string }>(
       '0x1',
       'dex',
-      'get_pair_denom',
+      'get_pair_metadata',
       [],
-      [bcs.string().serialize(metadata).toBase64()],
+      [bcs.object().serialize(metadata).toBase64()],
       height
     ).then((res) => [res.coin_a_denom, res.coin_b_denom])
   }
 
-  async getWeightPoolAmount(
+  async getWeightPoolInfo(
     height: number,
     metadata: string
   ): Promise<[number, number, number]> {
@@ -106,7 +194,7 @@ export class RESTClient {
       'dex',
       'get_pool_info',
       [],
-      [bcs.string().serialize(metadata).toBase64()],
+      [bcs.object().serialize(metadata).toBase64()],
       height
     ).then((res) => [
       Number(res.coin_a_amount),
@@ -115,7 +203,7 @@ export class RESTClient {
     ])
   }
 
-  async getStablePoolAmount(
+  async getStablePoolInfo(
     height: number,
     metadata: string
   ): Promise<{
@@ -130,7 +218,7 @@ export class RESTClient {
       'stableswap',
       'get_pool',
       [],
-      [bcs.address().serialize(metadata).toBase64()],
+      [bcs.object().serialize(metadata).toBase64()],
       height
     )
   }

@@ -15,6 +15,5 @@ export const config = {
     denom: string
     type: FungibleAssetType
     start_height: number
-    creation_height: number
   }[],
 }

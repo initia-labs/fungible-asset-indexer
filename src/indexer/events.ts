@@ -9,9 +9,3 @@ export interface WithdrawEvent {
   metadata_addr: string
   amount: number
 }
-
-export interface PrimaryStoreCreatedEvent {
-  owner_addr: string
-  store_addr: string
-  metadata_addr: string
-}

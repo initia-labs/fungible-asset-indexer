@@ -1,7 +1,7 @@
 import { config } from '../config'
 import { logger } from '../lib/logger'
 import { Monitor } from './Monitor'
-import { Indexer } from './Indexer'
+import { FungibleAssetIndexer } from './Indexer'
 
 const indexers: Monitor[] = []
 
@@ -9,12 +9,11 @@ export async function runIndexers(): Promise<void> {
   const rpcUrl = config.RPC_URL
   const restUrl = config.REST_URL
   for (const asset of config.FUNGIBLE_ASSETS) {
-    const indexer = new Indexer(
+    const indexer = new FungibleAssetIndexer(
       rpcUrl,
       restUrl,
-      asset.denom,
       asset.type,
-      asset.creation_height,
+      asset.denom,
       asset.start_height
     )
     indexers.push(indexer)

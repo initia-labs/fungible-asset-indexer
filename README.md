@@ -47,51 +47,33 @@ Create a `.env` file in the project root with the following configuration:
 #### Asset Configuration
 | Variable | Description | Example |
 |----------|-------------|---------|
-| FUNGIBLE_ASSETS | JSON array of assets to monitor | [{"denom":"move/543b35a39cfadad3da3c23249c474455d15efd2f94f849473226dee8a3c7a9e1","type":"weight", "start_height": 1847430, "creation_height": 1715000}]
+| FUNGIBLE_ASSETS | JSON array of assets to monitor | [{"denom":"move/543b35a39cfadad3da3c23249c474455d15efd2f94f849473226dee8a3c7a9e1","type":"weight", "start_height": 1847430}]
  |
 
-### 3. Start Indexer
-```bash
-npm run start
+### Asset Configuration Example
+
+```json
+{
+  "denom": "move/543b35a39cfadad3da3c23249c474455d15efd2f94f849473226dee8a3c7a9e1",
+  "type": "weight",
+  "start_height": 1847430
+}
 ```
 
-## Asset Types
+#### Configuration Fields
+
+| Field | Description |
+|-------|-------------|
+| `denom` | Asset denomination identifier |
+| `start_height` | Block height to start indexing from |
+| `type` | Asset type (see types below) |
+
+#### Asset Types
 
 - `normal`: Standard fungible asset (`0x1::fungible_asset`)
 - `stable`: Stable pool LP token (`0x1::stableswap`)
 - `weight`: Weighted pool LP token (`0x1::dex`)
 
-## Data Model
-
-### Balance Entity
-```typescript
-@Entity('balance')
-export class BalanceEntity {
-  @PrimaryColumn('text')
-  storeAccount: string        // Address of primary fungible store account
-
-  @PrimaryColumn('text')
-  @Index('balance_denom')
-  denom: string           // Asset denomination
-
-  @PrimaryColumn('bigint')
-  @Index('balance_height')
-  height: number         // Block height
-
-  @Column('bigint')
-  @Index('balance_amount')
-  amount: number        // Token amount
-
-  @Column('jsonb', { nullable: true })
-  underlying?: Record<string, number>  // Underlying tokens for LP positions
-}
-```
-
-### Example: LP Token Underlying Data
-```json
-{
-  "uinit": 800,    // 80% INIT
-  "uusdc": 200     // 20% USDC
-}
-```
-
+### 3. Start Indexer
+```bash
+npm run start

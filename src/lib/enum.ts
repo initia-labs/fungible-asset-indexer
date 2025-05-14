@@ -3,3 +3,8 @@ export enum FungibleAssetType {
   StableLP = 'stable',
   WeightLP = 'weight',
 }
+
+export enum FungibleAssetStoreType {
+  Primary = 'primary',
+  Other = 'other',
+}

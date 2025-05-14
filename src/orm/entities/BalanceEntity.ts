@@ -3,7 +3,7 @@ import { Entity, PrimaryColumn, Column, Index } from 'typeorm'
 @Entity('balance')
 export class BalanceEntity {
   @PrimaryColumn('text')
-  storeAccount: string
+  owner: string
 
   @PrimaryColumn('text')
   @Index('balance_denom')
@@ -13,10 +13,6 @@ export class BalanceEntity {
   @Index('balance_height')
   height: number
 
-  @Column('bigint')
-  @Index('balance_amount')
-  amount: number
-
-  @Column('jsonb', { nullable: true })
-  underlying?: Record<string, number>
+  @Column('text')
+  amount: string
 }

@@ -14,7 +14,6 @@ export abstract class Monitor {
   rest: RESTClient
   faType: FungibleAssetType
   denom: Denom
-  creationHeight: number
   startHeight: number
 
   metadata: string
@@ -23,22 +22,20 @@ export abstract class Monitor {
   scrappedHeight = 0
   syncedHeight = 0
   blockMap: Record<number, ScrappedBlock> = {}
-  storeAccounts = new Set<string>() // set of stores to fetch balance every snapshot interval
+  balanceDiffMap = new Map<string, BigNumber>()
 
   constructor(
     rpcUrl: string,
     restUrl: string,
-    denom: Denom,
     faType: FungibleAssetType,
-    creationHeight: number,
+    denom: Denom,
     startHeight?: number
   ) {
     this.rpc = new RPCClient(rpcUrl)
     this.rest = new RESTClient(restUrl)
     this.faType = faType
     this.denom = denom
-    this.creationHeight = creationHeight
-    this.startHeight = startHeight || creationHeight
+    this.startHeight = startHeight || 1
   }
 
   async run(): Promise<void> {
@@ -147,7 +144,7 @@ export abstract class Monitor {
         })
         this.syncedHeight++
         // clear store accounts every snapshot interval
-        this.storeAccounts.clear()
+        this.balanceDiffMap.clear()
       } catch (err) {
         console.log(`Error in processBlock for ${this.name()} ${err}`)
         logger.error(`Error in processBlock for ${this.name()} ${err}`)

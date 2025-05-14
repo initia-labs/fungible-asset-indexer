@@ -2,53 +2,61 @@ import { EntityManager } from 'typeorm'
 import { parseEvents } from '../lib/parse'
 import { ScrappedBlock } from '../lib/rpc'
 import { Monitor } from './Monitor'
-import { BalanceEntity, dataSource, SnapshotEntity } from '../orm'
+import { BalanceEntity, dataSource, PoolEntity, SnapshotEntity } from '../orm'
 import { DepositEvent, WithdrawEvent } from './events'
-import { FungibleAssetType } from 'src/lib/enum'
-import { logger } from 'src/lib/logger'
+import { FungibleAssetStoreType, FungibleAssetType } from 'src/lib/enum'
+import { StoreAccountEntity } from 'src/orm/entities/StoreAccountEntity'
 
 const batchSize = 100
-export class Indexer extends Monitor {
+export class FungibleAssetIndexer extends Monitor {
   name(): string {
     return `fungible_asset_indexer-${this.denom}`
   }
   // setup the indexer
   async setup(): Promise<void> {
     this.metadata = await this.rest.getMetadata(this.denom)
-    const snapshot: SnapshotEntity | null = await dataSource
-      .getRepository(SnapshotEntity)
-      .findOne({
-        where: {
-          denom: this.denom,
-        },
-      })
-    if (snapshot && snapshot.height >= this.startHeight) return
+    const snapshot = await dataSource.getRepository(SnapshotEntity).findOne({
+      where: { denom: this.denom },
+    })
+    if (snapshot) {
+      this.startHeight = snapshot.height
+      return
+    }
 
-    logger.info(`Setting up snapshot for ${this.name()}`)
-    // check if the asset exists at given creation height
-    const exist = await this.rest.checkAssetExists(
-      this.creationHeight,
-      this.metadata
-    )
-    if (!exist) {
-      throw new Error(
-        `Asset ${this.denom} does not exist at height ${this.creationHeight}`
-      )
-    }
-    // collect store accounts from creation height to start height and do snapshot
-    for (let h = this.creationHeight; h <= this.startHeight; h++) {
-      const block = await this.rpc.scrapBlock(h)
-      this.collectEvents(block)
-    }
     await dataSource.transaction(async (manager) => {
-      await this.snapshot(this.startHeight, manager)
-      await manager.getRepository(SnapshotEntity).upsert(
-        { denom: this.denom, height: this.startHeight },
-        {
-          conflictPaths: ['denom'],
-          skipUpdateIfNoValuesChanged: true,
-        }
+      // check if the asset exists
+      const exists = await this.rest.checkAssetExists(
+        this.startHeight,
+        this.metadata
       )
+      if (exists) {
+        // get all accounts
+        const accounts = await this.rest.getAllCosmosAccounts(this.startHeight)
+        // get all balances and insert them into the balance table
+        for (let i = 0; i < accounts.length; i += batchSize) {
+          const accountsBatch = accounts.slice(i, i + batchSize)
+          const batchResults = await Promise.all(
+            accountsBatch.map(async (account) => {
+              const balance = await this.rest.getBalance(
+                this.startHeight,
+                account,
+                this.denom
+              )
+              return {
+                owner: account,
+                height: this.startHeight,
+                ...balance,
+              }
+            })
+          )
+          await manager.getRepository(BalanceEntity).insert(batchResults)
+        }
+      }
+      // insert the snapshot into the snapshot table
+      await manager.insert(SnapshotEntity, {
+        denom: this.denom,
+        height: this.startHeight,
+      })
     })
   }
 
@@ -57,7 +65,7 @@ export class Indexer extends Monitor {
     block: ScrappedBlock
   ): Promise<void> {
     const height = Number(block.block.header.height)
-    this.collectEvents(block)
+    this.collectBalanceDiff(block)
     // return if no snapshot
     if (!this.shouldSnapshot(height)) return
     await this.snapshot(height, manager)
@@ -66,7 +74,7 @@ export class Indexer extends Monitor {
   /**
    * @dev collect the fungible asset events from block
    */
-  private collectEvents(block: ScrappedBlock) {
+  private collectBalanceDiff(block: ScrappedBlock) {
     for (const event of parseEvents(block)) {
       if (event.type === 'move') {
         switch (event.attributes.type_tag) {
@@ -75,7 +83,20 @@ export class Indexer extends Monitor {
               event.attributes.data
             ) as DepositEvent
             if (depositEvent.metadata_addr !== this.metadata) break
-            this.storeAccounts.add(depositEvent.store_addr)
+            if (this.balanceDiffMap.has(depositEvent.store_addr)) {
+              const existingValue = this.balanceDiffMap.get(
+                depositEvent.store_addr
+              )!
+              this.balanceDiffMap.set(
+                depositEvent.store_addr,
+                existingValue.plus(new BigNumber(depositEvent.amount))
+              )
+            } else {
+              this.balanceDiffMap.set(
+                depositEvent.store_addr,
+                new BigNumber(depositEvent.amount)
+              )
+            }
             break
           }
           case '0x1::fungible_asset::WithdrawEvent': {
@@ -83,7 +104,20 @@ export class Indexer extends Monitor {
               event.attributes.data
             ) as WithdrawEvent
             if (withdrawEvent.metadata_addr !== this.metadata) break
-            this.storeAccounts.add(withdrawEvent.store_addr)
+            if (this.balanceDiffMap.has(withdrawEvent.store_addr)) {
+              const existingValue = this.balanceDiffMap.get(
+                withdrawEvent.store_addr
+              )!
+              this.balanceDiffMap.set(
+                withdrawEvent.store_addr,
+                existingValue.minus(new BigNumber(withdrawEvent.amount))
+              )
+            } else {
+              this.balanceDiffMap.set(
+                withdrawEvent.store_addr,
+                new BigNumber(withdrawEvent.amount).negated()
+              )
+            }
             break
           }
           default:
@@ -97,76 +131,118 @@ export class Indexer extends Monitor {
    * @dev snapshot the balance of fungible asset
    */
   private async snapshot(height: number, manager: EntityManager) {
-    const balanceMap: Record<string, number> = {}
-    const stores = Array.from(this.storeAccounts)
-    // batch query balance
-    for (let i = 0; i < stores.length; i += batchSize) {
-      const batch = stores.slice(i, i + batchSize)
-      const batchRes = await Promise.all(
-        batch.map(async (addr) => [
-          addr,
-          await this.rest.getFungibleAssetAmount(height, addr),
-        ])
-      )
-      for (const [addr, balance] of batchRes) {
-        balanceMap[addr] = Number(balance ?? 0)
-      }
-    }
-    // snapshot; batch insert entities
-    const entities: BalanceEntity[] = await Promise.all(
-      Object.entries(balanceMap).map(async ([storeAccount, amount]) => {
-        return this.getBalanceEntity(height, amount, storeAccount)
-      })
-    )
-    // store the balance entities
-    for (let i = 0; i < entities.length; i += batchSize) {
-      const sliced = entities.slice(i, i + batchSize)
-      await manager.getRepository(BalanceEntity).insert(sliced)
-    }
-  }
+    const storeAccountRepo = manager.getRepository(StoreAccountEntity)
+    const balanceRepo = manager.getRepository(BalanceEntity)
+    const liquidityRepo = manager.getRepository(PoolEntity)
 
-  private async getBalanceEntity(
-    height: number,
-    amount: number,
-    storeAccount: string
-  ) {
+    const storeAccAndDiff: [StoreAccountEntity, BigNumber][] = []
+    // 1. Get the store entities from the balance diff map
+    // and insert them into the store table
+    for (const [storeAddress, diffAmount] of Object.entries(
+      this.balanceDiffMap
+    )) {
+      const storeEntity = await storeAccountRepo.findOne({
+        where: { storeAddress },
+      })
+
+      if (storeEntity) {
+        if (storeEntity.type === FungibleAssetStoreType.Other) {
+          continue
+        }
+        storeAccAndDiff.push([storeEntity, diffAmount as BigNumber])
+        continue
+      }
+
+      const owner = await this.rest.getOwner(height, storeAddress)
+      const primaryStore = await this.rest.getPrimaryFungibleStoreAddress(
+        height,
+        owner,
+        this.metadata
+      )
+
+      const storeType =
+        primaryStore === storeAddress
+          ? FungibleAssetStoreType.Primary
+          : FungibleAssetStoreType.Other
+
+      const newStoreAccount: StoreAccountEntity = {
+        storeAddress: storeAddress,
+        owner,
+        type: storeType,
+      }
+      await storeAccountRepo.insert(newStoreAccount)
+
+      if (storeType === FungibleAssetStoreType.Other) {
+        continue
+      }
+      storeAccAndDiff.push([newStoreAccount, diffAmount as BigNumber])
+    }
+
+    const balanceEntities: BalanceEntity[] = []
+    // Calculate balance entities
+    for (const [store, diffAmount] of storeAccAndDiff) {
+      const latestBalance = await balanceRepo.findOne({
+        where: {
+          owner: store.owner,
+          denom: this.denom,
+        },
+        order: { height: 'DESC' },
+      })
+
+      balanceEntities.push({
+        owner: store.owner,
+        denom: this.denom,
+        height,
+        amount: latestBalance
+          ? new BigNumber(latestBalance.amount).plus(diffAmount).toString()
+          : diffAmount.toString(),
+      })
+    }
+
+    // Store balance entities in batches
+    for (let i = 0; i < balanceEntities.length; i += batchSize) {
+      const batch = balanceEntities.slice(i, i + batchSize)
+      await balanceRepo.insert(batch)
+    }
+
+    // Save underlying token amount of liquidity tokens
     let underlying: Record<string, number> | undefined
     switch (this.faType) {
+      case FungibleAssetType.Normal:
+        return
       case FungibleAssetType.StableLP: {
         const [[amountA, amountB, totalShare], [coinADenom, coinBDenom]] =
           await Promise.all([
-            this.rest.getWeightPoolAmount(height, this.metadata),
-            await this.rest.getPairMetadata(height, this.metadata),
+            this.rest.getWeightPoolInfo(height, this.metadata),
+            await this.rest.getWeightPoolMetdata(height, this.metadata),
           ])
-        const balanceA = (amountA * amount) / totalShare
-        const balanceB = (amountB * amount) / totalShare
         underlying = {
-          [coinADenom]: balanceA,
-          [coinBDenom]: balanceB,
+          totalSupply: totalShare,
+          [coinADenom]: amountA,
+          [coinBDenom]: amountB,
         }
         break
       }
       case FungibleAssetType.WeightLP: {
         const [{ coin_balances: balances, coin_denoms: denoms }, totalSupply] =
           await Promise.all([
-            this.rest.getStablePoolAmount(height, this.metadata),
+            this.rest.getStablePoolInfo(height, this.metadata),
             this.rest.getFungibleAssetSupply(height, this.metadata),
           ])
-        underlying = {}
+        underlying = {
+          totalSupply: totalSupply,
+        }
         for (let i = 0; i < balances.length; i++) {
-          underlying[denoms[i]] = (balances[i] * amount) / totalSupply
+          underlying[denoms[i]] = balances[i]
         }
         break
       }
-      default: // normal fungible asset
-        break
     }
-    return {
-      storeAccount,
+    await liquidityRepo.insert({
       denom: this.denom,
       height,
-      amount,
+      type: this.faType,
       underlying,
-    }
+    })
   }
 }
