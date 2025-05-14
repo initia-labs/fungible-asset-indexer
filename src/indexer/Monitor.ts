@@ -23,7 +23,7 @@ export abstract class Monitor {
   scrappedHeight = 0
   syncedHeight = 0
   blockMap: Record<number, ScrappedBlock> = {}
-  storeAddrs = new Set<string>() // set of stores to fetch balance every snapshot interval
+  storeAccounts = new Set<string>() // set of stores to fetch balance every snapshot interval
 
   constructor(
     rpcUrl: string,
@@ -146,6 +146,8 @@ export abstract class Monitor {
           }
         })
         this.syncedHeight++
+        // clear store accounts every snapshot interval
+        this.storeAccounts.clear()
       } catch (err) {
         console.log(`Error in processBlock for ${this.name()} ${err}`)
         logger.error(`Error in processBlock for ${this.name()} ${err}`)

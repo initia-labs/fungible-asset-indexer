@@ -71,13 +71,13 @@ export class RESTClient {
     ).then((res) => Number(res))
   }
 
-  async getFungibleAssetAmount(height: number, storeAddr: string) {
+  async getFungibleAssetAmount(height: number, storeAccount: string) {
     return this.viewFunction<string>(
       '0x1',
       'fungible_asset',
       'balance',
       [],
-      [bcs.address().serialize(storeAddr).toBase64()],
+      [bcs.address().serialize(storeAccount).toBase64()],
       height
     )
   }

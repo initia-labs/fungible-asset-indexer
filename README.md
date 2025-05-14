@@ -1,12 +1,12 @@
 # Fungible Asset Indexer
 
-A service that indexes token balances and metadata on the Initia blockchain.
+A service that indexes token balances on the Initia L1.
 
 ## Prerequisites
 
-- Node.js 16 or higher
+- Node.js 20 or higher
 - PostgreSQL database
-- Access to Initia blockchain node
+- Access to Initia archival node
 
 ## Quick Start
 
@@ -68,7 +68,7 @@ npm run start
 @Entity('balance')
 export class BalanceEntity {
   @PrimaryColumn('text')
-  storeAddr: string        // Fungible store address
+  storeAccount: string        // Address of primary fungible store account
 
   @PrimaryColumn('text')
   @Index('balance_denom')
@@ -94,3 +94,4 @@ export class BalanceEntity {
   "uusdc": 200     // 20% USDC
 }
 ```
+

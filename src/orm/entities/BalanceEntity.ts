@@ -3,7 +3,7 @@ import { Entity, PrimaryColumn, Column, Index } from 'typeorm'
 @Entity('balance')
 export class BalanceEntity {
   @PrimaryColumn('text')
-  storeAddr: string
+  storeAccount: string
 
   @PrimaryColumn('text')
   @Index('balance_denom')

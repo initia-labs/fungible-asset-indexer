@@ -75,7 +75,7 @@ export class Indexer extends Monitor {
               event.attributes.data
             ) as DepositEvent
             if (depositEvent.metadata_addr !== this.metadata) break
-            this.storeAddrs.add(depositEvent.store_addr)
+            this.storeAccounts.add(depositEvent.store_addr)
             break
           }
           case '0x1::fungible_asset::WithdrawEvent': {
@@ -83,7 +83,7 @@ export class Indexer extends Monitor {
               event.attributes.data
             ) as WithdrawEvent
             if (withdrawEvent.metadata_addr !== this.metadata) break
-            this.storeAddrs.add(withdrawEvent.store_addr)
+            this.storeAccounts.add(withdrawEvent.store_addr)
             break
           }
           default:
@@ -98,7 +98,7 @@ export class Indexer extends Monitor {
    */
   private async snapshot(height: number, manager: EntityManager) {
     const balanceMap: Record<string, number> = {}
-    const stores = Array.from(this.storeAddrs)
+    const stores = Array.from(this.storeAccounts)
     // batch query balance
     for (let i = 0; i < stores.length; i += batchSize) {
       const batch = stores.slice(i, i + batchSize)
@@ -114,8 +114,8 @@ export class Indexer extends Monitor {
     }
     // snapshot; batch insert entities
     const entities: BalanceEntity[] = await Promise.all(
-      Object.entries(balanceMap).map(async ([storeAddr, amount]) => {
-        return this.getBalanceEntity(height, amount, storeAddr)
+      Object.entries(balanceMap).map(async ([storeAccount, amount]) => {
+        return this.getBalanceEntity(height, amount, storeAccount)
       })
     )
     // store the balance entities
@@ -128,7 +128,7 @@ export class Indexer extends Monitor {
   private async getBalanceEntity(
     height: number,
     amount: number,
-    storeAddr: string
+    storeAccount: string
   ) {
     let underlying: Record<string, number> | undefined
     switch (this.faType) {
@@ -162,7 +162,7 @@ export class Indexer extends Monitor {
         break
     }
     return {
-      storeAddr,
+      storeAccount,
       denom: this.denom,
       height,
       amount,
