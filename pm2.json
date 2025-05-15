@@ -1,0 +1,11 @@
+{
+  "apps" : [
+      {
+        "name" : "fungible-asset-indexer",
+        "cwd" : ".",
+        "script" : "npm run start",
+        "watch" : false,
+        "autorestart" : true
+      }
+  ]
+}
