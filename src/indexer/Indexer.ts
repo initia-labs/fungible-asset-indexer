@@ -26,7 +26,7 @@ export class FungibleAssetIndexer extends Monitor {
     const snapshot = await dataSource.getRepository(SnapshotEntity).findOne({
       where: { denom: this.denom },
     })
-    if (snapshot) {
+    if (snapshot && this.startHeight <= snapshot.height) {
       this.startHeight = snapshot.height
       return
     }
@@ -44,20 +44,23 @@ export class FungibleAssetIndexer extends Monitor {
         // get all balances and insert them into the balance table
         for (let i = 0; i < accounts.length; i += batchSize) {
           const accountsBatch = accounts.slice(i, i + batchSize)
-          const batchResults = await Promise.all(
-            accountsBatch.map(async (account) => {
-              const balance = await this.rest.getBalance(
-                this.startHeight,
-                account,
-                this.denom
-              )
-              return {
-                owner: account,
-                height: this.startHeight,
-                ...balance,
-              }
-            })
-          )
+          const batchResults = (
+            await Promise.all(
+              accountsBatch.map(async (account) => {
+                const balance = await this.rest.getBalance(
+                  this.startHeight,
+                  account,
+                  this.denom
+                )
+                return {
+                  owner: account,
+                  height: this.startHeight,
+                  ...balance,
+                }
+              })
+            )
+          ).filter((result) => result.amount !== '0')
+          if (batchResults.length === 0) continue
           await manager.getRepository(BalanceEntity).insert(batchResults)
         }
       }
@@ -203,12 +206,15 @@ export class FungibleAssetIndexer extends Monitor {
       case FungibleAssetType.Normal:
         // skip
         return
-      case FungibleAssetType.StableLP: {
+      case FungibleAssetType.WeightLP: {
         const [[amountA, amountB, totalShare], [coinADenom, coinBDenom]] =
           await Promise.all([
             this.rest.getWeightPoolInfo(height, this.metadata),
             await this.rest.getWeightPoolMetdata(height, this.metadata),
           ])
+        if (totalShare === 0) {
+          return
+        }
         underlying = {
           totalSupply: totalShare,
           [coinADenom]: amountA,
@@ -216,12 +222,15 @@ export class FungibleAssetIndexer extends Monitor {
         }
         break
       }
-      case FungibleAssetType.WeightLP: {
+      case FungibleAssetType.StableLP: {
         const [{ coin_balances: balances, coin_denoms: denoms }, totalSupply] =
           await Promise.all([
             this.rest.getStablePoolInfo(height, this.metadata),
             this.rest.getFungibleAssetSupply(height, this.metadata),
           ])
+        if (totalSupply === 0) {
+          return
+        }
         underlying = {
           totalSupply: totalSupply,
         }

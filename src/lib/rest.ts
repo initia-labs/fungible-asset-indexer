@@ -5,12 +5,10 @@ import http from 'http'
 
 export interface Account {
   '@type': string
-  base_account: {
-    address: AccAddress
-    pub_key: string | null
-    account_number: string
-    sequence: string
-  }
+  address: AccAddress
+  pub_key: string | null
+  account_number: string
+  sequence: string
 }
 export interface AccountPaginationResponse {
   accounts: Account[]
@@ -50,19 +48,19 @@ export class RESTClient {
   }
 
   async getMetadata(denom: Denom): Promise<string> {
-    return this.get<{ metadata: string }>('initia/move/v1/metadata', {
+    return this.get<{ metadata: string }>('/initia/move/v1/metadata', {
       denom,
     }).then((res) => res.metadata)
   }
 
-  async getCosmosAccount(height: number, paginationKey?: string) {
+  async getCosmosBaseAccounts(height: number, paginationKey?: string) {
     const params: APIParams = {}
     if (paginationKey) {
       params['pagination.key'] = paginationKey
     }
 
     return this.get<AccountPaginationResponse>(
-      'cosmos/auth/v1beta1/accounts',
+      '/cosmos/auth/v1beta1/accounts',
       {
         ...params,
       },
@@ -70,7 +68,7 @@ export class RESTClient {
     ).then((res) => ({
       accounts: res.accounts.reduce<AccAddress[]>((acc, account) => {
         if (account['@type'] === '/cosmos.auth.v1beta1.BaseAccount') {
-          acc.push(account.base_account.address)
+          acc.push(account.address)
         }
         return acc
       }, []),
@@ -82,7 +80,7 @@ export class RESTClient {
     let paginationKey: string | undefined
     const accounts: string[] = []
     for (;;) {
-      const response = await this.getCosmosAccount(height, paginationKey)
+      const response = await this.getCosmosBaseAccounts(height, paginationKey)
       accounts.push(...response.accounts)
       if (response.pagination.next_key) {
         paginationKey = response.pagination.next_key
@@ -95,7 +93,7 @@ export class RESTClient {
 
   async getBalance(height: number, account: string, denom: string) {
     return this.get<BalanceResponse>(
-      `cosmos/bank/v1beta1/balances/${account}/by_denom`,
+      `/cosmos/bank/v1beta1/balances/${account}/by_denom`,
       { denom },
       height
     ).then((res) => res.balance)

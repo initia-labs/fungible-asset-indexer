@@ -125,7 +125,6 @@ export abstract class Monitor {
         } else {
           continue
         }
-
         await dataSource.transaction(async (manager: EntityManager) => {
           await this.handleBlock(manager, scrappedBlock)
           if (currentHeight % 10 === 0) {
