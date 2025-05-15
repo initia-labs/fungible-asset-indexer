@@ -53,11 +53,16 @@ Create a `.env` file in the project root with the following configuration:
 ### Asset Configuration Example
 
 ```json
-{
+[{
   "denom": "move/543b35a39cfadad3da3c23249c474455d15efd2f94f849473226dee8a3c7a9e1",
   "type": "weight",
   "start_height": 1847430
-}
+},
+{
+  "denom": "move/443b35a39cfadad3da3c232....",
+  "type": "stable",
+  "start_height": 2047430
+}]
 ```
 
 #### Configuration Fields

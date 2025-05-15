@@ -70,7 +70,7 @@ export class FungibleAssetIndexer extends Monitor {
     block: ScrappedBlock
   ): Promise<void> {
     const height = Number(block.block.header.height)
-    await this.handleBalanceDiff(block, manager)
+    await this.handleFungibleEvents(block, manager)
     // return if no snapshot
     if (!this.shouldSnapshot(height)) return
     logger.info(`Snapshot fungible asset :${this.denom}, height: ${height}`)
@@ -80,7 +80,7 @@ export class FungibleAssetIndexer extends Monitor {
     )
     await this.updateOwner(height, manager)
     await this.snapshotBalanceHistory(height, manager)
-    // 2. Snapshot underlying token amount of pool. skip the normal token
+    // 2. Snapshot pool info. skip this step in the normal asset
     if (this.faType === FungibleAssetType.Normal) return
     logger.info(`Snapshot pool for ${this.denom} at height ${height}`)
     await this.snapshotPool(height, manager)
@@ -89,11 +89,11 @@ export class FungibleAssetIndexer extends Monitor {
   /**
    * @dev collect the fungible asset events from block
    */
-  private async handleBalanceDiff(
+  private async handleFungibleEvents(
     block: ScrappedBlock,
     manager: EntityManager
   ) {
-    const store2BalanceDiff = new Map<string, number>()
+    const assetEventMap = new Map<string, number>() // store address -> diff amount
     for (const event of parseEvents(block)) {
       if (event.type !== 'move') {
         continue
@@ -117,17 +117,17 @@ export class FungibleAssetIndexer extends Monitor {
           break
         }
         default:
-          // skip other events
+          // unreachable
           continue
       }
-      const existingValue = store2BalanceDiff.get(storeAddr) || 0
-      store2BalanceDiff.set(storeAddr, existingValue + diff)
+      const existingValue = assetEventMap.get(storeAddr) || 0
+      assetEventMap.set(storeAddr, existingValue + diff)
     }
 
     // Update the balance table with the diff
     const latestBalances = await manager.getRepository(BalanceEntity).find({
       where: {
-        storeAddress: In(Array.from(store2BalanceDiff.keys())),
+        storeAddress: In(Array.from(assetEventMap.keys())),
         denom: this.denom,
       },
     })
@@ -137,8 +137,7 @@ export class FungibleAssetIndexer extends Monitor {
         parseInt(balance.amount, 10),
       ])
     )
-    const balanceRepo = manager.getRepository(BalanceEntity)
-    const balanceEntities = Array.from(store2BalanceDiff.entries()).map(
+    const balanceEntities = Array.from(assetEventMap.entries()).map(
       ([storeAddress, diffAmount]) => {
         const latestBalance = latestBalanceMap.get(storeAddress)
         return {
@@ -150,9 +149,14 @@ export class FungibleAssetIndexer extends Monitor {
         }
       }
     )
-    await balanceRepo.save(balanceEntities, { chunk: batchSize })
+    await manager
+      .getRepository(BalanceEntity)
+      .save(balanceEntities, { chunk: batchSize })
   }
 
+  /**
+   * @dev Update the empty owner of the balance before doing the snapshot the balance
+   */
   private async updateOwner(height: number, manager: EntityManager) {
     // if there are rows that have empty string and primary is true, update them
     const updatableBalances = await manager.getRepository(BalanceEntity).find({
@@ -175,6 +179,9 @@ export class FungibleAssetIndexer extends Monitor {
     await manager.getRepository(BalanceEntity).save(updatableBalances)
   }
 
+  /**
+   * @dev snapshot the balance history
+   */
   private async snapshotBalanceHistory(height: number, manager: EntityManager) {
     // make snapshot history of balance
     await manager.query(
@@ -202,6 +209,9 @@ export class FungibleAssetIndexer extends Monitor {
     )
   }
 
+  /**
+   * @dev snapshot the info(token amounts of each underlying amount and the total supply) of pool
+   */
   private async snapshotPool(height: number, manager: EntityManager) {
     // skip if the asset does not exist
     if (!this.assetExists) {
@@ -266,6 +276,6 @@ export class FungibleAssetIndexer extends Monitor {
     if (primaryStore === storeAddress) {
       return owner
     }
-    return undefined
+    return
   }
 }
