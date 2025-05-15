@@ -7,6 +7,7 @@ import { DepositEvent, WithdrawEvent } from './events'
 import { FungibleAssetStoreType, FungibleAssetType } from 'src/lib/enum'
 import { StoreAccountEntity } from 'src/orm/entities/StoreAccountEntity'
 import { LRUCache } from 'lru-cache'
+import { logger } from 'src/lib/logger'
 
 const options = {
   max: 10000,
@@ -37,6 +38,7 @@ export class FungibleAssetIndexer extends Monitor {
         this.metadata
       )
       if (exists) {
+        logger.info('Asset exists, fetching all of accounts holding ...')
         // get all accounts
         const accounts = await this.rest.getAllCosmosAccounts(this.startHeight)
         // get all balances and insert them into the balance table
@@ -119,6 +121,7 @@ export class FungibleAssetIndexer extends Monitor {
    * @dev snapshot the balance of fungible asset
    */
   private async snapshot(height: number, manager: EntityManager) {
+    logger.info(`Snapshot fungible asset :${this.denom}, height: ${height}`)
     const storeAccountRepo = manager.getRepository(StoreAccountEntity)
     const balanceRepo = manager.getRepository(BalanceEntity)
     const liquidityRepo = manager.getRepository(PoolEntity)
