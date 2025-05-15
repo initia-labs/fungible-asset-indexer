@@ -56,7 +56,7 @@ Create a `.env` file in the project root with the following configuration:
 {
   "denom": "move/543b35a39cfadad3da3c23249c474455d15efd2f94f849473226dee8a3c7a9e1",
   "type": "weight",
-  "start_height": 1847430 // RECOMMED TO SET HEIGHT THAT CREATION HEIGHT OF ASSET
+  "start_height": 1847430
 }
 ```
 
@@ -67,6 +67,8 @@ Create a `.env` file in the project root with the following configuration:
 | `denom` | Asset denomination identifier |
 | `start_height` | Block height to start indexing from |
 | `type` | Asset type (see types below) |
+
+> **Note**: Setting `start_height` to a block height before the asset's creation to avoid heavy balance queries
 
 #### Asset Types
 
