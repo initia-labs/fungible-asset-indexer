@@ -6,9 +6,16 @@ import { BalanceEntity, dataSource, PoolEntity, SnapshotEntity } from '../orm'
 import { DepositEvent, WithdrawEvent } from './events'
 import { FungibleAssetStoreType, FungibleAssetType } from 'src/lib/enum'
 import { StoreAccountEntity } from 'src/orm/entities/StoreAccountEntity'
+import { LRUCache } from 'lru-cache'
+
+const options = {
+  max: 10000,
+}
 
 const batchSize = 100
 export class FungibleAssetIndexer extends Monitor {
+  storeAcc2Owner = new LRUCache<string, StoreAccountEntity>(options)
+
   name(): string {
     return `fungible_asset_indexer-${this.denom}`
   }
@@ -76,54 +83,35 @@ export class FungibleAssetIndexer extends Monitor {
    */
   private collectBalanceDiff(block: ScrappedBlock) {
     for (const event of parseEvents(block)) {
-      if (event.type === 'move') {
-        switch (event.attributes.type_tag) {
-          case '0x1::fungible_asset::DepositEvent': {
-            const depositEvent = JSON.parse(
-              event.attributes.data
-            ) as DepositEvent
-            if (depositEvent.metadata_addr !== this.metadata) break
-            if (this.balanceDiffMap.has(depositEvent.store_addr)) {
-              const existingValue = this.balanceDiffMap.get(
-                depositEvent.store_addr
-              )!
-              this.balanceDiffMap.set(
-                depositEvent.store_addr,
-                existingValue.plus(new BigNumber(depositEvent.amount))
-              )
-            } else {
-              this.balanceDiffMap.set(
-                depositEvent.store_addr,
-                new BigNumber(depositEvent.amount)
-              )
-            }
-            break
-          }
-          case '0x1::fungible_asset::WithdrawEvent': {
-            const withdrawEvent = JSON.parse(
-              event.attributes.data
-            ) as WithdrawEvent
-            if (withdrawEvent.metadata_addr !== this.metadata) break
-            if (this.balanceDiffMap.has(withdrawEvent.store_addr)) {
-              const existingValue = this.balanceDiffMap.get(
-                withdrawEvent.store_addr
-              )!
-              this.balanceDiffMap.set(
-                withdrawEvent.store_addr,
-                existingValue.minus(new BigNumber(withdrawEvent.amount))
-              )
-            } else {
-              this.balanceDiffMap.set(
-                withdrawEvent.store_addr,
-                new BigNumber(withdrawEvent.amount).negated()
-              )
-            }
-            break
-          }
-          default:
-            break
-        }
+      if (event.type !== 'move') {
+        continue
       }
+
+      let diff: BigNumber
+      let storeAddr: string
+      switch (event.attributes.type_tag) {
+        case '0x1::fungible_asset::DepositEvent':
+        case '0x1::fungible_asset::WithdrawEvent': {
+          const eventData = JSON.parse(event.attributes.data) as
+            | DepositEvent
+            | WithdrawEvent
+          if (eventData.metadata_addr !== this.metadata) continue
+
+          const eventAmount = new BigNumber(eventData.amount)
+          storeAddr = eventData.store_addr
+          diff =
+            event.attributes.type_tag === '0x1::fungible_asset::WithdrawEvent'
+              ? eventAmount.negated()
+              : eventAmount
+          break
+        }
+        default:
+          // skip other events
+          continue
+      }
+      const existingValue =
+        this.balanceDiffMap.get(storeAddr) || new BigNumber(0)
+      this.balanceDiffMap.set(storeAddr, existingValue.plus(diff))
     }
   }
 
@@ -141,45 +129,46 @@ export class FungibleAssetIndexer extends Monitor {
     for (const [storeAddress, diffAmount] of Object.entries(
       this.balanceDiffMap
     )) {
-      const storeEntity = await storeAccountRepo.findOne({
-        where: { storeAddress },
-      })
+      // cache
+      let storeEntity: StoreAccountEntity | undefined | null =
+        this.storeAcc2Owner.get(storeAddress)
 
-      if (storeEntity) {
-        if (storeEntity.type === FungibleAssetStoreType.Other) {
-          continue
+      if (!storeEntity) {
+        // db
+        storeEntity = await storeAccountRepo.findOne({
+          where: { storeAddress },
+        })
+
+        if (!storeEntity) {
+          const owner = await this.rest.getOwner(height, storeAddress)
+          const primaryStoreAddr =
+            await this.rest.getPrimaryFungibleStoreAddress(
+              height,
+              owner,
+              this.metadata
+            )
+
+          storeEntity = {
+            storeAddress,
+            owner,
+            type:
+              primaryStoreAddr === storeAddress
+                ? FungibleAssetStoreType.Primary
+                : FungibleAssetStoreType.Other,
+          }
+
+          await storeAccountRepo.insert(storeEntity)
         }
+
+        this.storeAcc2Owner.set(storeAddress, storeEntity)
+      }
+      if (storeEntity.type === FungibleAssetStoreType.Primary) {
         storeAccAndDiff.push([storeEntity, diffAmount as BigNumber])
-        continue
       }
-
-      const owner = await this.rest.getOwner(height, storeAddress)
-      const primaryStore = await this.rest.getPrimaryFungibleStoreAddress(
-        height,
-        owner,
-        this.metadata
-      )
-
-      const storeType =
-        primaryStore === storeAddress
-          ? FungibleAssetStoreType.Primary
-          : FungibleAssetStoreType.Other
-
-      const newStoreAccount: StoreAccountEntity = {
-        storeAddress: storeAddress,
-        owner,
-        type: storeType,
-      }
-      await storeAccountRepo.insert(newStoreAccount)
-
-      if (storeType === FungibleAssetStoreType.Other) {
-        continue
-      }
-      storeAccAndDiff.push([newStoreAccount, diffAmount as BigNumber])
     }
 
+    // 2. Handle Balance
     const balanceEntities: BalanceEntity[] = []
-    // Calculate balance entities
     for (const [store, diffAmount] of storeAccAndDiff) {
       const latestBalance = await balanceRepo.findOne({
         where: {
@@ -205,10 +194,11 @@ export class FungibleAssetIndexer extends Monitor {
       await balanceRepo.insert(batch)
     }
 
-    // Save underlying token amount of liquidity tokens
+    // 3. Save underlying token amount of liquidity tokens. skip the normal token
     let underlying: Record<string, number> | undefined
     switch (this.faType) {
       case FungibleAssetType.Normal:
+        // skip
         return
       case FungibleAssetType.StableLP: {
         const [[amountA, amountB, totalShare], [coinADenom, coinBDenom]] =
