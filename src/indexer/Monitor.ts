@@ -16,13 +16,13 @@ export abstract class Monitor {
   denom: Denom
   startHeight: number
 
+  assetExists = false
   metadata: string
   isRunning = false
   latestHeight = 0
   scrappedHeight = 0
   syncedHeight = 0
   blockMap: Record<number, ScrappedBlock> = {}
-  balanceDiffMap = new Map<string, BigNumber>()
 
   constructor(
     rpcUrl: string,
@@ -142,8 +142,6 @@ export abstract class Monitor {
           }
         })
         this.syncedHeight++
-        // clear store accounts every snapshot interval
-        this.balanceDiffMap.clear()
       } catch (err) {
         console.log(`Error in processBlock for ${this.name()} ${err}`)
         logger.error(`Error in processBlock for ${this.name()} ${err}`)
