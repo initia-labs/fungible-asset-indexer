@@ -12,8 +12,7 @@ import {
 import { DepositEvent, WithdrawEvent } from './events'
 import { FungibleAssetType } from 'src/lib/enum'
 import { logger } from 'src/lib/logger'
-import { bcs } from '@initia/initia.js'
-import * as crypto from 'crypto'
+import { getPrimaryStore } from 'src/lib/primary'
 
 const batchSize = 100
 export class FungibleAssetIndexer extends Monitor {
@@ -54,7 +53,7 @@ export class FungibleAssetIndexer extends Monitor {
                 )
                 return {
                   owner: account,
-                  storeAddress: this.getPrimaryStore(account, this.metadata),
+                  storeAddress: getPrimaryStore(account, this.metadata),
                   ...balance,
                 }
               })
@@ -180,6 +179,7 @@ export class FungibleAssetIndexer extends Monitor {
     }
 
     await manager.getRepository(BalanceEntity).save(updatableBalances)
+    // make snapshot history of balance
     await manager
       .createQueryBuilder()
       .insert()
@@ -257,21 +257,10 @@ export class FungibleAssetIndexer extends Monitor {
     storeAddress: string
   ): Promise<string | undefined> {
     const owner = await this.rest.getOwner(height, storeAddress)
-    const primaryStore = this.getPrimaryStore(owner, this.metadata)
+    const primaryStore = getPrimaryStore(owner, this.metadata)
     if (primaryStore === storeAddress) {
       return owner
     }
     return undefined
-  }
-
-  private getPrimaryStore(owner: string, metadata: string): string {
-    const bytes = bcs.address().serialize(owner).toBytes()
-    const metadataBytes = bcs.address().serialize(metadata).toBytes()
-    const combinedBytes = Uint8Array.from([...bytes, ...metadataBytes, 0xfc])
-
-    const hash = crypto.createHash('SHA3-256')
-    hash.update(combinedBytes)
-    const hashResult = hash.digest('hex')
-    return bcs.address().fromHex(hashResult).toString()
   }
 }
