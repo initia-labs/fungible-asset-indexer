@@ -2,13 +2,7 @@ import { EntityManager, In } from 'typeorm'
 import { parseEvents } from '../lib/parse'
 import { ScrappedBlock } from '../lib/rpc'
 import { Monitor } from './Monitor'
-import {
-  BalanceEntity,
-  BalanceHistoryEntity,
-  dataSource,
-  PoolEntity,
-  SnapshotEntity,
-} from '../orm'
+import { BalanceEntity, dataSource, PoolEntity, SnapshotEntity } from '../orm'
 import { FugibleAssetEvent } from './events'
 import { FungibleAssetType } from 'src/lib/enum'
 import { logger } from 'src/lib/logger'
@@ -81,10 +75,11 @@ export class FungibleAssetIndexer extends Monitor {
     if (!this.shouldSnapshot(height)) return
     logger.info(`Snapshot fungible asset :${this.denom}, height: ${height}`)
     // 1. Snapshot Balance and make history of it.
-    await this.snapshotBalanceHistory(height, manager)
     logger.info(
       `Snapshot balance history for ${this.denom} at height ${height}`
     )
+    await this.updateOwner(height, manager)
+    await this.snapshotBalanceHistory(height, manager)
     // 2. Snapshot underlying token amount of pool. skip the normal token
     if (this.faType === FungibleAssetType.Normal) return
     logger.info(`Snapshot pool for ${this.denom} at height ${height}`)
@@ -158,7 +153,7 @@ export class FungibleAssetIndexer extends Monitor {
     await balanceRepo.save(balanceEntities, { chunk: batchSize })
   }
 
-  private async snapshotBalanceHistory(height: number, manager: EntityManager) {
+  private async updateOwner(height: number, manager: EntityManager) {
     // if there are rows that have empty string and primary is true, update them
     const updatableBalances = await manager.getRepository(BalanceEntity).find({
       where: {
@@ -178,21 +173,33 @@ export class FungibleAssetIndexer extends Monitor {
       }
     }
     await manager.getRepository(BalanceEntity).save(updatableBalances)
+  }
 
+  private async snapshotBalanceHistory(height: number, manager: EntityManager) {
     // make snapshot history of balance
-    await manager
-      .createQueryBuilder()
-      .insert()
-      .into(BalanceHistoryEntity)
-      .select([
-        `'${height}' as height`,
-        'balance.owner as owner',
-        'balance.storeAddress as storeAddress',
-        'balance.denom as denom',
-        'balance.amount as amount',
-      ])
-      .from(BalanceEntity, 'balance')
-      .execute()
+    await manager.query(
+      `
+    INSERT INTO balance_history (
+      height, 
+      owner, 
+      store_address, 
+      denom, 
+      amount
+    )
+    SELECT 
+      $1 as height,
+      owner,
+      store_address,
+      denom,
+      amount
+    FROM balance
+    WHERE denom = $2
+      AND amount != '0'
+      AND owner != ''
+      AND "primary" = true
+  `,
+      [height, this.denom]
+    )
   }
 
   private async snapshotPool(height: number, manager: EntityManager) {
