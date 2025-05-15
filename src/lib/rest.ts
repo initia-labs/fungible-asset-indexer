@@ -117,12 +117,12 @@ export class RESTClient {
     ).then((res) => JSON.parse(res.data) as T)
   }
 
-  async getOwner(height: number, storeAccount: string) {
+  async getFugibleStoreOwner(height: number, storeAccount: string) {
     return this.viewFunction<string>(
       '0x1',
       'object',
       'owner',
-      [],
+      ['0x1::fungible_asset::FungibleStore'],
       [bcs.address().serialize(storeAccount).toBase64()],
       height
     )
@@ -168,11 +168,11 @@ export class RESTClient {
     ).then((res) => Number(res))
   }
 
-  async getWeightPoolMetdata(height: number, metadata: string) {
+  async getWeightPoolDenom(height: number, metadata: string) {
     return this.viewFunction<{ coin_a_denom: string; coin_b_denom: string }>(
       '0x1',
       'dex',
-      'get_pair_metadata',
+      'get_pair_denom',
       [],
       [bcs.object().serialize(metadata).toBase64()],
       height

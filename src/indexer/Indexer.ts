@@ -9,7 +9,7 @@ import {
   PoolEntity,
   SnapshotEntity,
 } from '../orm'
-import { DepositEvent, WithdrawEvent } from './events'
+import { FugibleAssetEvent } from './events'
 import { FungibleAssetType } from 'src/lib/enum'
 import { logger } from 'src/lib/logger'
 import { getPrimaryStore } from 'src/lib/primary'
@@ -82,7 +82,12 @@ export class FungibleAssetIndexer extends Monitor {
     logger.info(`Snapshot fungible asset :${this.denom}, height: ${height}`)
     // 1. Snapshot Balance and make history of it.
     await this.snapshotBalanceHistory(height, manager)
+    logger.info(
+      `Snapshot balance history for ${this.denom} at height ${height}`
+    )
     // 2. Snapshot underlying token amount of pool. skip the normal token
+    if (this.faType === FungibleAssetType.Normal) return
+    logger.info(`Snapshot pool for ${this.denom} at height ${height}`)
     await this.snapshotPool(height, manager)
   }
 
@@ -93,26 +98,26 @@ export class FungibleAssetIndexer extends Monitor {
     block: ScrappedBlock,
     manager: EntityManager
   ) {
-    const store2BalanceDiff = new Map<string, BigNumber>()
+    const store2BalanceDiff = new Map<string, number>()
     for (const event of parseEvents(block)) {
       if (event.type !== 'move') {
         continue
       }
-      let diff: BigNumber
+      let diff: number
       let storeAddr: string
       switch (event.attributes.type_tag) {
         case '0x1::fungible_asset::DepositEvent':
         case '0x1::fungible_asset::WithdrawEvent': {
-          const eventData = JSON.parse(event.attributes.data) as
-            | DepositEvent
-            | WithdrawEvent
+          const eventData = JSON.parse(
+            event.attributes.data
+          ) as FugibleAssetEvent
           if (eventData.metadata_addr !== this.metadata) continue
 
-          const eventAmount = new BigNumber(eventData.amount)
+          const eventAmount = parseInt(eventData.amount, 10)
           storeAddr = eventData.store_addr
           diff =
             event.attributes.type_tag === '0x1::fungible_asset::WithdrawEvent'
-              ? eventAmount.negated()
+              ? -eventAmount
               : eventAmount
           break
         }
@@ -120,8 +125,8 @@ export class FungibleAssetIndexer extends Monitor {
           // skip other events
           continue
       }
-      const existingValue = store2BalanceDiff.get(storeAddr) || new BigNumber(0)
-      store2BalanceDiff.set(storeAddr, existingValue.plus(diff))
+      const existingValue = store2BalanceDiff.get(storeAddr) || 0
+      store2BalanceDiff.set(storeAddr, existingValue + diff)
     }
 
     // Update the balance table with the diff
@@ -131,10 +136,10 @@ export class FungibleAssetIndexer extends Monitor {
         denom: this.denom,
       },
     })
-    const latestBalanceMap = new Map<string, BigNumber>(
+    const latestBalanceMap = new Map<string, number>(
       latestBalances.map((balance) => [
         balance.storeAddress,
-        new BigNumber(balance.amount),
+        parseInt(balance.amount, 10),
       ])
     )
     const balanceRepo = manager.getRepository(BalanceEntity)
@@ -145,17 +150,12 @@ export class FungibleAssetIndexer extends Monitor {
           storeAddress,
           denom: this.denom,
           amount: latestBalance
-            ? latestBalance.plus(diffAmount).toString()
+            ? (latestBalance + diffAmount).toString()
             : diffAmount.toString(),
         }
       }
     )
-
-    // Store balance entities in batches
-    for (let i = 0; i < balanceEntities.length; i += batchSize) {
-      const batch = balanceEntities.slice(i, i + batchSize)
-      await balanceRepo.save(batch)
-    }
+    await balanceRepo.save(balanceEntities, { chunk: batchSize })
   }
 
   private async snapshotBalanceHistory(height: number, manager: EntityManager) {
@@ -177,8 +177,8 @@ export class FungibleAssetIndexer extends Monitor {
         balance.primary = false
       }
     }
-
     await manager.getRepository(BalanceEntity).save(updatableBalances)
+
     // make snapshot history of balance
     await manager
       .createQueryBuilder()
@@ -186,10 +186,10 @@ export class FungibleAssetIndexer extends Monitor {
       .into(BalanceHistoryEntity)
       .select([
         `'${height}' as height`,
-        'owner',
-        'storeAddress',
-        'denom',
-        'amount',
+        'balance.owner as owner',
+        'balance.storeAddress as storeAddress',
+        'balance.denom as denom',
+        'balance.amount as amount',
       ])
       .from(BalanceEntity, 'balance')
       .execute()
@@ -204,14 +204,11 @@ export class FungibleAssetIndexer extends Monitor {
 
     let underlying: Record<string, number> | undefined
     switch (this.faType) {
-      case FungibleAssetType.Normal:
-        // skip
-        return
       case FungibleAssetType.WeightLP: {
         const [[amountA, amountB, totalShare], [coinADenom, coinBDenom]] =
           await Promise.all([
             this.rest.getWeightPoolInfo(height, this.metadata),
-            await this.rest.getWeightPoolMetdata(height, this.metadata),
+            this.rest.getWeightPoolDenom(height, this.metadata),
           ])
         if (totalShare === 0) {
           return
@@ -256,7 +253,8 @@ export class FungibleAssetIndexer extends Monitor {
     height: number,
     storeAddress: string
   ): Promise<string | undefined> {
-    const owner = await this.rest.getOwner(height, storeAddress)
+    const owner = await this.rest.getFugibleStoreOwner(height, storeAddress)
+
     const primaryStore = getPrimaryStore(owner, this.metadata)
     if (primaryStore === storeAddress) {
       return owner
