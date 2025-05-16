@@ -9,7 +9,7 @@ export const config = {
   RPC_URL: getEnv('RPC_URL', 'https://rpc.testnet.initia.xyz'),
   REST_URL: getEnv('REST_URL', 'https://rest.testnet.initia.xyz'),
   MONITOR_INTERVAL: parseInt(getEnv('MONITOR_INTERVAL', '1000')),
-  COOLING_DURATION: parseInt(getEnv('COOLING_DURATION', '100')),
+  COOLING_DURATION: parseInt(getEnv('COOLING_DURATION', '10')),
   SNAPSHOT_INTERVAL: parseInt(getEnv('SNAPSHOT_INTERVAL', '100')),
   FUNGIBLE_ASSETS: JSON.parse(getEnv('FUNGIBLE_ASSETS', '[]')) as {
     denom: string

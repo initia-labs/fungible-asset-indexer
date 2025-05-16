@@ -41,7 +41,7 @@ Create a `.env` file in the project root with the following configuration:
 | Variable | Description | Default Value |
 |----------|-------------|---------------|
 | MONITOR_INTERVAL | Block monitoring interval in ms | `1000` |
-| COOLING_DURATION | Operation cooling period in ms | `100` |
+| COOLING_DURATION | Operation cooling period in ms | `10` |
 | SNAPSHOT_INTERVAL | Snapshot interval in blocks | `100` |
 
 #### Asset Configuration
