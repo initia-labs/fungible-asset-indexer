@@ -159,7 +159,7 @@ export class PoolEntity {
   @Column('text')
   type: FungibleAssetType
 
-  @Column('jsonb', { nullable: true })
-  underlying?: Record<string, number>
+  @Column('jsonb')
+  underlying: Record<string, number>
 }
 ```
