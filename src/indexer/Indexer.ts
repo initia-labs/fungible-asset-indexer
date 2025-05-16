@@ -134,6 +134,7 @@ export class FungibleAssetIndexer extends Monitor {
       assetEventMap.set(storeAddr, existingValue + diff)
     }
 
+    if (assetEventMap.size === 0) return
     // Update the balance table with the diff
     const latestBalances = await manager.getRepository(BalanceEntity).find({
       where: {
