@@ -6,14 +6,13 @@ function createLogger(name: string) {
     winston.format.timestamp(),
     winston.format.json(),
     winston.format.printf((info) => {
-      const { timestamp, level, message, context, action, ...meta } = info
+      const { timestamp, level, message, context, action } = info
       return JSON.stringify({
         timestamp,
         level,
         message,
         context,
         action,
-        ...meta,
       })
     }),
   ]
