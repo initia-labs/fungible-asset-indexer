@@ -106,7 +106,7 @@ export class BalanceEntity {
   @Index('balance_owner')
   owner: string
 
-  @Column('text')
+  @Column('numeric', { precision: 20, scale: 0 })
   amount: string
 
   @Column('boolean', { default: true })
@@ -119,6 +119,7 @@ export class BalanceEntity {
 Records account balances at each snapshot interval.
 
 ```typescript
+
 @Entity('balance_history')
 export class BalanceHistoryEntity {
   @PrimaryColumn('bigint')
@@ -134,9 +135,9 @@ export class BalanceHistoryEntity {
 
   @Column('text')
   @Index('balance_history_owner')
-  owner: string
+  owner: string // owner of primary fungible store
 
-  @Column('text')
+  @Column('numeric', { precision: 20, scale: 0 })
   amount: string
 }
 ```

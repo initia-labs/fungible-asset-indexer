@@ -151,12 +151,11 @@ export class FungibleAssetIndexer extends Monitor {
     const balanceEntities = Array.from(assetEventMap.entries()).map(
       ([storeAddress, diffAmount]) => {
         const latestBalance = latestBalanceMap.get(storeAddress)
+        const amount = latestBalance ? latestBalance + diffAmount : diffAmount
         return {
           storeAddress,
           denom: this.denom,
-          amount: latestBalance
-            ? (latestBalance + diffAmount).toString()
-            : diffAmount.toString(),
+          amount: amount.toString(),
         }
       }
     )

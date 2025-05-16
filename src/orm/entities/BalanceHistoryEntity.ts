@@ -17,6 +17,6 @@ export class BalanceHistoryEntity {
   @Index('balance_history_owner')
   owner: string // owner of primary fungible store
 
-  @Column('text')
+  @Column('numeric', { precision: 20, scale: 0 })
   amount: string
 }

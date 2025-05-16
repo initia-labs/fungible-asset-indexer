@@ -13,7 +13,7 @@ export class BalanceEntity {
   @Index('balance_owner')
   owner: string
 
-  @Column('text')
+  @Column('numeric', { precision: 20, scale: 0 })
   amount: string
 
   @Column('boolean', { default: true })
