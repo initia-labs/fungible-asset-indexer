@@ -84,3 +84,81 @@ Create a `.env` file in the project root with the following configuration:
 ### 3. Start Indexer
 ```bash
 npm run start
+```
+
+## Data Models
+
+### Balance Entity
+Tracks current account balances at the indexing height.
+If indexer is indexing latest block, this table will have recent balances of each accounts.
+
+```typescript
+@Entity('balance')
+export class BalanceEntity {
+  @PrimaryColumn('text')
+  storeAddress: string
+
+  @PrimaryColumn('text')
+  @Index('balance_denom')
+  denom: string
+
+  @Column('text', { default: '' })
+  @Index('balance_owner')
+  owner: string
+
+  @Column('text')
+  amount: string
+
+  @Column('boolean', { default: true })
+  @Index('balance_primary')
+  primary: boolean
+}
+```
+
+### Balance History Entity
+Records account balances at each snapshot interval.
+
+```typescript
+@Entity('balance_history')
+export class BalanceHistoryEntity {
+  @PrimaryColumn('bigint')
+  @Index('balance_history_height')
+  height: number
+
+  @PrimaryColumn('text')
+  storeAddress: string
+
+  @PrimaryColumn('text')
+  @Index('balance_history_denom')
+  denom: string
+
+  @Column('text')
+  @Index('balance_history_owner')
+  owner: string
+
+  @Column('text')
+  amount: string
+}
+```
+
+### Pool Entity
+Stores metadata for liquidity pools (stablepool or weighted pool LP tokens).
+
+```typescript
+@Entity('pool')
+export class PoolEntity {
+  @PrimaryColumn('text')
+  @Index('pool_denom')
+  denom: string
+
+  @PrimaryColumn('bigint')
+  @Index('pool_height')
+  height: number
+
+  @Column('text')
+  type: FungibleAssetType
+
+  @Column('jsonb', { nullable: true })
+  underlying?: Record<string, number>
+}
+```
