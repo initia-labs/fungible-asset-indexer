@@ -9,5 +9,8 @@ export function getPrimaryStore(owner: string, metadata: string): string {
   const hash = crypto.createHash('SHA3-256')
   hash.update(combinedBytes)
   const hashResult = hash.digest('hex')
-  return bcs.address().fromHex(hashResult).toString()
+  return bcs
+    .address()
+    .fromHex(hashResult)
+    .replace(/^0x0+|^0x|^0+(?!x)/, '')
 }

@@ -1,25 +1,35 @@
 import winston from 'winston'
 
 function createLogger(name: string) {
-  const formats = [winston.format.errors({ stack: true })]
-
-  formats.push(winston.format.colorize())
-
-  formats.push(
+  const formats = [
+    winston.format.errors({ stack: true }),
     winston.format.timestamp(),
+    winston.format.json(),
     winston.format.printf((info) => {
-      return `${info.timestamp} [${info.level} - ${name}]: ${
-        info.stack || info.message
-      }`
-    })
-  )
+      const { timestamp, level, message, context, action, ...meta } = info
+      return JSON.stringify({
+        timestamp,
+        level,
+        message,
+        context,
+        action,
+        ...meta,
+      })
+    }),
+  ]
 
   const logger = winston.createLogger({
     format: winston.format.combine(...formats),
-    defaultMeta: { service: 'user-service' },
+    defaultMeta: { service: name },
+    transports: [
+      new winston.transports.Console({
+        format: winston.format.combine(
+          winston.format.colorize(),
+          winston.format.simple()
+        ),
+      }),
+    ],
   })
-
-  logger.add(new winston.transports.Console())
 
   return logger
 }

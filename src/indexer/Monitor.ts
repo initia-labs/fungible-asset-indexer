@@ -67,7 +67,10 @@ export abstract class Monitor {
         )
       } catch (err) {
         console.log(`Error in checkHeight for ${this.name()} ${err}`)
-        logger.error(`Error in checkHeight for ${this.name()} ${err}`)
+        logger.error('Error in checkHeight', {
+          name: this.name(),
+          error: `${err}`,
+        })
       } finally {
         await delay(config.MONITOR_INTERVAL)
       }
@@ -99,12 +102,18 @@ export abstract class Monitor {
           })
           .catch((err) => {
             console.log(`Error in scrapBlock for ${this.name()} ${err}`)
-            logger.error(`Error in scrapBlock for ${this.name()} ${err}`)
+            logger.error('Error in scrapBlock', {
+              name: this.name(),
+              error: `${err}`,
+            })
           })
         this.scrappedHeight++
       } catch (err) {
         console.log(`Error in scrapBlock for ${this.name()} ${err}`)
-        logger.error(`Error in scrapBlock for ${this.name()} ${err}`)
+        logger.error('Error in scrapBlock', {
+          name: this.name(),
+          error: `${err}`,
+        })
       } finally {
         await delay(config.COOLING_DURATION)
       }
@@ -128,7 +137,10 @@ export abstract class Monitor {
         await dataSource.transaction(async (manager: EntityManager) => {
           await this.handleBlock(manager, scrappedBlock)
           if (currentHeight % 10 === 0) {
-            logger.info(`${this.name()} height ${currentHeight}`)
+            logger.info('Processing block', {
+              name: this.name(),
+              height: currentHeight,
+            })
           }
 
           // update state only when snapshot
@@ -144,7 +156,10 @@ export abstract class Monitor {
         this.syncedHeight++
       } catch (err) {
         console.log(`Error in processBlock for ${this.name()} ${err}`)
-        logger.error(`Error in processBlock for ${this.name()} ${err}`)
+        logger.error('Error in processBlock', {
+          name: this.name(),
+          error: `${err}`,
+        })
       } finally {
         await delay(config.COOLING_DURATION)
       }

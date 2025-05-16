@@ -19,6 +19,7 @@ export class FungibleAssetIndexer extends Monitor {
     const snapshot = await dataSource.getRepository(SnapshotEntity).findOne({
       where: { denom: this.denom },
     })
+
     if (snapshot && this.startHeight <= snapshot.height) {
       this.startHeight = snapshot.height
       return
@@ -30,38 +31,44 @@ export class FungibleAssetIndexer extends Monitor {
         this.startHeight,
         this.metadata
       )
-      if (this.assetExists) {
-        logger.info('Asset exists, fetching all of accounts holding ...')
-        // get all accounts
-        const accounts = await this.rest.getAllCosmosAccounts(this.startHeight)
-        // get all balances and insert them into the balance table
-        for (let i = 0; i < accounts.length; i += batchSize) {
-          const accountsBatch = accounts.slice(i, i + batchSize)
-          const batchResults = (
-            await Promise.all(
-              accountsBatch.map(async (account) => {
-                const balance = await this.rest.getBalance(
-                  this.startHeight,
-                  account,
-                  this.denom
-                )
-                return {
-                  owner: account,
-                  storeAddress: getPrimaryStore(account, this.metadata),
-                  ...balance,
-                }
-              })
-            )
-          ).filter((result) => result.amount !== '0')
-          if (batchResults.length === 0) continue
-          await manager.getRepository(BalanceEntity).insert(batchResults)
-        }
-      }
-      // insert the snapshot into the snapshot table
+      // insert the snapshot
       await manager.insert(SnapshotEntity, {
         denom: this.denom,
         height: this.startHeight,
       })
+      if (!this.assetExists) {
+        return
+      }
+      logger.info(
+        'Asset exists before start height of indexing,Fetching existing asset accounts',
+        {
+          denom: this.denom,
+        }
+      )
+      // get all accounts
+      const accounts = await this.rest.getAllCosmosAccounts(this.startHeight)
+      // get all balances and insert them into the balance table
+      for (let i = 0; i < accounts.length; i += batchSize) {
+        const accountsBatch = accounts.slice(i, i + batchSize)
+        const batchResults = (
+          await Promise.all(
+            accountsBatch.map(async (account) => {
+              const balance = await this.rest.getBalance(
+                this.startHeight,
+                account,
+                this.denom
+              )
+              return {
+                owner: account,
+                storeAddress: getPrimaryStore(account, this.metadata),
+                ...balance,
+              }
+            })
+          )
+        ).filter((result) => result.amount !== '0')
+        if (batchResults.length === 0) continue
+        await manager.getRepository(BalanceEntity).insert(batchResults)
+      }
     })
   }
 
@@ -73,17 +80,20 @@ export class FungibleAssetIndexer extends Monitor {
     await this.handleFungibleEvents(block, manager)
     // return if no snapshot
     if (!this.shouldSnapshot(height)) return
-    logger.info(`Snapshot fungible asset :${this.denom}, height: ${height}`)
     // 1. Snapshot Balance and make history of it.
-    logger.info(
-      `Snapshot balance history for ${this.denom} at height ${height}`
-    )
+    logger.info('Snapshot Balance History', {
+      denom: this.denom,
+      height: height,
+    })
     await this.updateOwner(height, manager)
     await this.snapshotBalanceHistory(height, manager)
     // 2. Snapshot pool info. skip this step in the normal asset
     if (this.faType === FungibleAssetType.Normal) return
-    logger.info(`Snapshot pool for ${this.denom} at height ${height}`)
-    await this.snapshotPool(height, manager)
+    logger.info('Snapshot Pool Data', {
+      asset: this.denom,
+      height,
+    })
+    await this.snapshotPoolData(height, manager)
   }
 
   /**
@@ -155,7 +165,7 @@ export class FungibleAssetIndexer extends Monitor {
   }
 
   /**
-   * @dev Update the empty owner of the balance before doing the snapshot the balance
+   * @dev Update the empty owner of the balance entity before doing the snapshot the balance
    */
   private async updateOwner(height: number, manager: EntityManager) {
     // if there are rows that have empty string and primary is true, update them
@@ -212,7 +222,7 @@ export class FungibleAssetIndexer extends Monitor {
   /**
    * @dev snapshot the info(token amounts of each underlying amount and the total supply) of pool
    */
-  private async snapshotPool(height: number, manager: EntityManager) {
+  private async snapshotPoolData(height: number, manager: EntityManager) {
     // skip if the asset does not exist
     if (!this.assetExists) {
       this.assetExists = await this.rest.checkAssetExists(height, this.metadata)
@@ -273,7 +283,7 @@ export class FungibleAssetIndexer extends Monitor {
     const owner = await this.rest.getFugibleStoreOwner(height, storeAddress)
 
     const primaryStore = getPrimaryStore(owner, this.metadata)
-    if (primaryStore === storeAddress) {
+    if (primaryStore === storeAddress.replace(/^0x0+|^0x|^0+(?!x)/, '')) {
       return owner
     }
     return
