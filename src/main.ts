@@ -1,10 +1,9 @@
 import { once } from 'lodash'
 import { runIndexers, stopIndexers } from './indexer'
 import { initConnection, finalizeConnection } from './orm'
-import { initServer, finalizeServer } from './server'
+import { bootstrap } from './api/main'
 
 async function gracefulShutdown(): Promise<void> {
-  finalizeServer()
   stopIndexers()
   await finalizeConnection()
   process.exit(0)
@@ -12,7 +11,6 @@ async function gracefulShutdown(): Promise<void> {
 
 export async function start(): Promise<void> {
   await initConnection()
-  initServer()
   await runIndexers()
 
   // attach graceful shutdown
@@ -22,4 +20,6 @@ export async function start(): Promise<void> {
 
 if (require.main === module) {
   start().catch(console.log)
+  // start the API server
+  bootstrap()
 }
