@@ -2,6 +2,8 @@ import { once } from 'lodash'
 import { runIndexers, stopIndexers } from './indexer'
 import { initConnection, finalizeConnection } from './orm'
 import { bootstrap } from './api/main'
+import { config } from './config'
+import { logger } from './lib/logger'
 
 async function gracefulShutdown(): Promise<void> {
   stopIndexers()
@@ -10,6 +12,16 @@ async function gracefulShutdown(): Promise<void> {
 }
 
 export async function start(): Promise<void> {
+  logger.info('Starting application with configuration:', {
+    dbHost: config.DBHOST,
+    dbHostRo: config.DBHOSTRO,
+    dbName: config.DATABASE,
+    denoms: config.FUNGIBLE_ASSETS.map(asset => ({
+      denom: asset.denom,
+      type: asset.type,
+      startHeight: asset.start_height
+    }))
+  })
   await initConnection()
   await runIndexers()
 
