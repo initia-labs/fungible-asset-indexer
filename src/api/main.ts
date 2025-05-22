@@ -10,6 +10,9 @@ export async function bootstrap() {
     bufferLogs: true,
   })
 
+  // strip prefix 
+  app.setGlobalPrefix('funassindexer')
+
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Fungible Asset API')
     .setDescription('Fungible Asset API Description')
