@@ -15,5 +15,8 @@ export const config = {
     denom: string
     type: FungibleAssetType
     start_height: number
-  }[],
+  }[], 
+  DBHOST: getEnv('DBHOST', 'localhost'),
+  DBHOSTRO: getEnv('DBHOSTRO', 'localhost'),
+  DATABASE: getEnv('DATABASE', 'fungible_asset_indexer'),
 }
