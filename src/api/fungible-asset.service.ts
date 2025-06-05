@@ -16,9 +16,16 @@ import {
 } from './fungible-asset.dto'
 import axios from 'axios'
 import { ethers } from 'ethers'
+import { Cache } from '../lib/cache'
 
 @Injectable()
 export class FungibleAssetService {
+  private readonly cache: Cache;
+
+  constructor() {
+    this.cache = Cache.getInstance(300); // 300 seconds TTL
+  }
+
   async getSnapshots(): Promise<SnapshotResponse[]> {
     const snapshots = await readOnlyDataSource
       .getRepository(SnapshotEntity)
@@ -121,9 +128,22 @@ export class FungibleAssetService {
     startBlock: number,
     endBlock: number
   ): Promise<BalanceDistributionResponse[]> {
+
+    const CACHE_KEY = `onyx-rewards-${startBlock}-${endBlock}`;
+
+    const cachedResult = this.cache.get<BalanceDistributionResponse[]>(CACHE_KEY);
+    if (cachedResult) {
+      return cachedResult;
+    }
+
     const result = await readOnlyDataSource.query(`
-      with average_balances as (
-        select owner, avg(amount) as avgBalance
+      with snapshots as (
+          select count(distinct height) as snapshotCount
+          from balance_history
+          where height between $1 and $2
+      ),
+      average_balances as (
+        select owner, sum(amount)/(select snapshotCount from snapshots) as avgBalance
         from balance_history
         where height between $1 and $2
         group by 1
@@ -134,16 +154,28 @@ export class FungibleAssetService {
       select owner, avgBalance / (select balance from total) * 100 as percent, avgBalance
       from average_balances
       order by percent desc
+
     `, [startBlock, endBlock])
-    return result.map(row => ({
+
+    const response = result.map(row => ({
       owner: row.owner,
       percent: parseFloat(row.percent),
       avgBalance: parseFloat(row.avgbalance)
     }))
+
+    this.cache.set(CACHE_KEY, result);
+
+    return response
   }
 
   async getOnyxRewards(): Promise<OnyxRewardsResponse> {
-   
+    const CACHE_KEY = 'onyx-rewards';
+
+    const cachedResult = this.cache.get<OnyxRewardsResponse>(CACHE_KEY);
+    if (cachedResult) {
+      return cachedResult;
+    }
+
     const provider = new ethers.JsonRpcProvider('https://jsonrpc-yominet-1.anvil.asia-southeast.initia.xyz')
     const tokenAddress = '0x4badfb501ab304ff11217c44702bb9e9732e7cf4'
     const walletAddress = '0x5da4e32E2fF3136b0dBdc9DbCc4734B16918992A'
@@ -156,9 +188,13 @@ export class FungibleAssetService {
       const balanceToken = ethers.formatEther(balance) // Convert from wei to ether
       const amount = (Number(balanceToken) / 3).toString() // Divide by 3
       
-      return {
+      const result = {
         amount: amount,
       }
+
+      this.cache.set(CACHE_KEY, result);
+      
+      return result
     } catch (error) {
       throw new HttpException('Failed to retrieve balance data: ' + error.message, 500)
     }
