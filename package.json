@@ -28,7 +28,9 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typeorm": "^0.3.19",
-    "winston": "^3.11.0"
+    "winston": "^3.11.0",
+    "ethers": "^6.11.1",
+    "web3": "^4.5.0"
   },
   "devDependencies": {
     "@eslint/js": "^9.5.0",

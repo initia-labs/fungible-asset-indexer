@@ -59,3 +59,31 @@ export interface BalanceHistoryResponse {
   amount: string
   underlying?: Record<string, number>
 }
+
+export class GetBalanceDistributionDto {
+  @ApiProperty({ description: 'Start block height (inclusive)' })
+  @IsNumber()
+  @Type(() => Number)
+  startBlock: number
+
+  @ApiProperty({ description: 'End block height (inclusive)' })
+  @IsNumber()
+  @Type(() => Number)
+  endBlock: number
+}
+
+export interface BalanceDistributionResponse {
+  owner: string
+  percent: number
+  avgBalance: number
+}
+
+export class GetOnyxRewardsDto {
+  @ApiProperty({ description: 'Wallet address to check rewards for' })
+  @IsString()
+  walletAddress: string
+}
+
+export interface OnyxRewardsResponse {
+  amount: string
+}
