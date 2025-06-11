@@ -78,12 +78,13 @@ export interface BalanceDistributionResponse {
   avgBalance: number
 }
 
-export class GetOnyxRewardsDto {
-  @ApiProperty({ description: 'Wallet address to check rewards for' })
+export class RewardsDto {
+  @ApiProperty({ description: 'Rewards for denom' })
   @IsString()
-  walletAddress: string
+  denom: string
 }
 
-export interface OnyxRewardsResponse {
-  amount: string
+export interface RewardsResponse {
+  denom: string
+  amount: number
 }

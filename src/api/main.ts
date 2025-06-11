@@ -11,7 +11,7 @@ export async function bootstrap() {
   })
 
   // strip prefix 
-  app.setGlobalPrefix('funassindexer')
+  app.setGlobalPrefix('indexer/fungible-asset/v1/')
 
   const swaggerConfig = new DocumentBuilder()
     .setTitle('Fungible Asset API')
