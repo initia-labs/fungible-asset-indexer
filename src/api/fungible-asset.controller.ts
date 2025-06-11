@@ -8,7 +8,8 @@ import {
   SnapshotResponse,
   GetBalanceDistributionDto,
   BalanceDistributionResponse,
-  OnyxRewardsResponse,
+  RewardsDto,
+  RewardsResponse,
 } from './fungible-asset.dto'
 import { ApiOperation, ApiQuery } from '@nestjs/swagger'
 
@@ -51,9 +52,11 @@ export class FungibleAssetController {
     return this.apiService.getBalanceDistribution(dto.startBlock, dto.endBlock)
   }
 
-  @Get('onyx-rewards')
-  @ApiOperation({ summary: 'Get Onyx rewards' })
-  async getOnyxRewards(): Promise<OnyxRewardsResponse> {
-    return this.apiService.getOnyxRewards()
+  @Get('rewards')
+  @ApiOperation({ summary: 'Get Denom rewards' })
+  async rewards(
+    @Query() dto: RewardsDto
+  ): Promise<RewardsResponse> {
+    return this.apiService.getOnyxRewards(dto.denom)
   }
 }

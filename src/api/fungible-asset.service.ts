@@ -12,11 +12,12 @@ import {
   BalanceResponse,
   SnapshotResponse,
   BalanceDistributionResponse,
-  OnyxRewardsResponse,
+  RewardsResponse,
 } from './fungible-asset.dto'
 import axios from 'axios'
 import { ethers } from 'ethers'
 import { Cache } from '../lib/cache'
+import { config } from '../config'
 
 @Injectable()
 export class FungibleAssetService {
@@ -168,10 +169,16 @@ export class FungibleAssetService {
     return response
   }
 
-  async getOnyxRewards(): Promise<OnyxRewardsResponse> {
+  async getOnyxRewards(
+    denom: string
+  ): Promise<RewardsResponse> {
+    if (denom != config.FUNGIBLE_ASSETS[0].denom) {
+      throw new HttpException('Untracked denom', 400)
+    }
+
     const CACHE_KEY = 'onyx-rewards';
 
-    const cachedResult = this.cache.get<OnyxRewardsResponse>(CACHE_KEY);
+    const cachedResult = this.cache.get<RewardsResponse>(CACHE_KEY);
     if (cachedResult) {
       return cachedResult;
     }
@@ -179,6 +186,7 @@ export class FungibleAssetService {
     const provider = new ethers.JsonRpcProvider('https://jsonrpc-yominet-1.anvil.asia-southeast.initia.xyz')
     const tokenAddress = '0x4badfb501ab304ff11217c44702bb9e9732e7cf4'
     const walletAddress = '0x5da4e32E2fF3136b0dBdc9DbCc4734B16918992A'
+    const onyxDenom = 'evm/4BaDFb501Ab304fF11217C44702bb9E9732E7CF4'
 
     const abi = ['function balanceOf(address) view returns (uint256)']
     const contract = new ethers.Contract(tokenAddress, abi, provider)
@@ -186,17 +194,18 @@ export class FungibleAssetService {
     try {
       const balance = await contract.balanceOf(walletAddress)
       const balanceToken = ethers.formatEther(balance) // Convert from wei to ether
-      const amount = (Number(balanceToken) / 3).toString() // Divide by 3
+      const amount = Number(balanceToken) / 3// Divide by 3 
       
       const result = {
         amount: amount,
+        denom: onyxDenom
       }
 
       this.cache.set(CACHE_KEY, result);
       
       return result
     } catch (error) {
-      throw new HttpException('Failed to retrieve balance data: ' + error.message, 500)
+      return new HttpException('Failed to retrieve rewards: ' + error.message, 500)
     }
   }
 }
