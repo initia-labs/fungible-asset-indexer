@@ -10,6 +10,9 @@ export async function bootstrap() {
     bufferLogs: true,
   })
 
+  // Enable CORS for all origins
+  app.enableCors()
+
   // strip prefix 
   app.setGlobalPrefix('indexer/fungible-asset/v1/')
 

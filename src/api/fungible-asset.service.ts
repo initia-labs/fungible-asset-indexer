@@ -185,7 +185,7 @@ export class FungibleAssetService {
 
     const provider = new ethers.JsonRpcProvider('https://jsonrpc-yominet-1.anvil.asia-southeast.initia.xyz')
     const tokenAddress = '0x4badfb501ab304ff11217c44702bb9e9732e7cf4'
-    const walletAddress = '0x5da4e32E2fF3136b0dBdc9DbCc4734B16918992A'
+    const walletAddress = '0x3d7f111B3b69C657624b8633a997A56300212872'
     const onyxDenom = 'evm/4BaDFb501Ab304fF11217C44702bb9E9732E7CF4'
 
     const abi = ['function balanceOf(address) view returns (uint256)']
@@ -194,7 +194,7 @@ export class FungibleAssetService {
     try {
       const balance = await contract.balanceOf(walletAddress)
       const balanceToken = ethers.formatEther(balance) // Convert from wei to ether
-      const amount = Number(balanceToken) / 3// Divide by 3 
+      const amount = Number(balanceToken) / 14
       
       const result = {
         amount: amount,
