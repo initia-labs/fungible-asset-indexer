@@ -167,5 +167,9 @@ export class PoolEntity {
 
 docker build -t funassindexer .
 #ecr login
+
+docker tag funassindexer:latest 590183983824.dkr.ecr.ap-southeast-1.amazonaws.com/test/api:funassindexer-latest
+docker push 590183983824.dkr.ecr.ap-southeast-1.amazonaws.com/test/api:funassindexer-latest
+
 docker tag funassindexer:latest 590183983824.dkr.ecr.ap-southeast-1.amazonaws.com/prod/api:funassindexer-latest
 docker push 590183983824.dkr.ecr.ap-southeast-1.amazonaws.com/prod/api:funassindexer-latest

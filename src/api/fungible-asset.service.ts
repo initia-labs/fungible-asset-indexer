@@ -172,10 +172,11 @@ export class FungibleAssetService {
   async getOnyxRewards(
     denom: string
   ): Promise<RewardsResponse> {
-    if (denom != config.FUNGIBLE_ASSETS[0].denom) {
-      throw new HttpException('Untracked denom', 400)
-    }
+    const trackedDenoms = config.FUNGIBLE_ASSETS.map(asset => asset.denom);
 
+    if (!trackedDenoms.includes(denom)) {
+      throw new HttpException('Untracked denom', 400);
+    }
     const CACHE_KEY = 'onyx-rewards';
 
     const cachedResult = this.cache.get<RewardsResponse>(CACHE_KEY);
@@ -194,7 +195,7 @@ export class FungibleAssetService {
     try {
       const balance = await contract.balanceOf(walletAddress)
       const balanceToken = ethers.formatEther(balance) // Convert from wei to ether
-      const amount = Number(balanceToken) / 14
+      const amount = Number(balanceToken) / 14 / 2
       
       const result = {
         amount: amount,
