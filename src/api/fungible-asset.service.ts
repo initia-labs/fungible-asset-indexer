@@ -184,6 +184,10 @@ export class FungibleAssetService {
       return cachedResult;
     }
 
+    let denominator = 0
+    if (denom === 'move/07d1fef22a2d391eb47922148d58dc77db025f12d014ae98437a6fac051de4c4') denominator = 0.9
+    if (denom === '"move/35767058b322a9838d9bec0a7e96a19ab313a09d6b421bd6ee8ad675db7a687d') denominator = 0.1
+
     const provider = new ethers.JsonRpcProvider('https://jsonrpc-yominet-1.anvil.asia-southeast.initia.xyz')
     const tokenAddress = '0x4badfb501ab304ff11217c44702bb9e9732e7cf4'
     const walletAddress = '0x3d7f111B3b69C657624b8633a997A56300212872'
@@ -195,7 +199,7 @@ export class FungibleAssetService {
     try {
       const balance = await contract.balanceOf(walletAddress)
       const balanceToken = ethers.formatEther(balance) // Convert from wei to ether
-      const amount = Number(balanceToken) / 14 / 2
+      const amount = (Number(balanceToken) / 14) * denominator
       
       const result = {
         amount: amount,
