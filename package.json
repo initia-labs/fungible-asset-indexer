@@ -27,7 +27,7 @@
     "reflect-metadata": "^0.2.2",
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
-    "typeorm": "^0.3.19",
+    "typeorm": "^0.3.27",
     "winston": "^3.11.0"
   },
   "devDependencies": {
