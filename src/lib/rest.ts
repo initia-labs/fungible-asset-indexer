@@ -160,7 +160,7 @@ export class RESTClient {
   async getFungibleAssetSupply(height: number, metadata: string) {
     return this.viewFunction<string>(
       '0x1',
-      'fungible_asset',
+      'coin',
       'supply',
       [],
       [bcs.address().serialize(metadata).toBase64()],
