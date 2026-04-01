@@ -1,11 +1,10 @@
 FROM node:22-alpine
-RUN npm install -g npm@latest
 
 WORKDIR /usr/src/app
 
 COPY . .
 
-RUN npm ci
+RUN npx -y npm@11 ci
 
 EXPOSE 5000
 
